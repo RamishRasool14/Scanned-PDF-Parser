@@ -17,16 +17,16 @@ def boundary(image):
     r,c,_ = image.shape
     image = cv2.line(image,(0,0),(0,r),(255,255,255),30)
     image = cv2.line(image,(0,0),(c,0),(255,255,255),30)
-    image = cv2.line(image,(0,1850),(c,1850),(255,255,255),30)
+    image = cv2.line(image,(0,int(r*0.8409)),(c,int(r*0.8409)),(255,255,255),30)
     image = cv2.line(image,(c,0),(c,r),(255,255,255),30)
     
-    
-    image = image[:1850,:]
+    image = image[:(int(r*0.8409)),:]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     thresh = cv2.threshold(blurred, 160,255,cv2.THRESH_BINARY_INV)[1]
     gray = np.float32(thresh)
     dst = cv2.cornerHarris(gray,2,3,0.04)
+
     indices = np.argwhere((dst>0.01*dst.max()) == True)
     distances = np.linalg.norm(indices,axis = 1)
     sorted_distances = sorted(distances)
@@ -89,16 +89,16 @@ def BreakPoints(a,adjust,x,total = None):
                 break
     return breakpoints   
 
-
-def segmentation(a):
+def segmentation(a,d):
     r,c,_ = a.shape
     img = a.copy()
     img = cv2.blur(img , (10,3))
     img = np.where(img < 200 , 0,255)
     img = np.float32(img)
+    
     l = []
     for x in range(0,img[:,1200,0].shape[0]-60):
-        l.append(( (img[x:x+60,1200,0]/255).sum() , x))
+        l.append(( (img[x:x+d,1200,0]/255).sum() , x))
     sort = sorted(l,key = lambda x: x[0],reverse = False)
     pts = [0]
     def toadd(pts,pt):
@@ -107,7 +107,7 @@ def segmentation(a):
                 return False
         return True
     for (s,x) in sort:
-        if toadd(pts,x) and s < 20:
+        if toadd(pts,x) and s < 10:
             pts.append(x)
     breakpoints = sorted(pts)
     breakpoints.append(r)
@@ -119,20 +119,22 @@ def segmentation(a):
             sections.append(a[prevp:nextp,0:c])
     return sections,breakpoints
 
-    
-def extractsec1(LIST):
-    STATE = [(988, 102), (1148, 149)]
-    RISKID = [(1144, 47), (1276, 95)]
-    RATINGEFFECTIVE = [(360, 105), (483, 152)]
+
+def extractsec1(LIST,c,z):
     RATINGLIST = []
-    PRODUCTION = [(735,104),(862,153)]
-    RISKNAME = [(251, 58), (562,94)]
-    STATECODE = [(0,195),(144,234)]
     STATEL = []
-    CARRIER = [(98,239),(176,276)]
-    EFF_DATE = [(719,235),(847,274)]
-    EXP_DATE = [(1044,232),(1170,272)]
-    POLICYNO = [(338,238),(553,276)]
+    STATE = [(int(0.76*c), int(0.376*z)), (int(0.883*c), int(0.549*z))]
+    RISKID = [(int(0.88*c), int(0.173*z)), (int(1*c),int(0.35*z))]
+    RATINGEFFECTIVE = [(int(0.279*c), int(0.387*z)), (int(0.371*c), int(0.56*z))]
+    PRODUCTION = [(int(0.565*c),int(0.383*z)),(int(0.663*c),int(0.564*z))]
+    RISKNAME = [(int(0.193*c), int(0.214*z)), (int(0.632*c),int(0.346*z))]
+    STATECODE = [(int(0*c),int(0.719*z)),(int(0.1107*c),int(0.86*z))]
+    CARRIER = [(int(0.07*c),int(0.88*z)),(int(0.135*c),int(1*z))]
+    EFF_DATE = [(int(0.553*c),int(0.88*z)),(int(0.651*c),int(1*z))]
+    EXP_DATE = [(int(0.803*c),int(0.88*z)),(int(0.9*c),int(1*z))]
+    POLICYNO = [(int(0.26*c),int(0.88*z)),(int(0.43*c),int(1*z))]
+    sec1list = [STATE,RISKID,RATINGEFFECTIVE,PRODUCTION,RISKNAME,STATECODE,CARRIER,EFF_DATE,EXP_DATE,POLICYNO]
+
     RISKLIST = []
     risk_name = ""
     risk_id = ""
@@ -166,10 +168,10 @@ def extractsec1(LIST):
         if blockIsIn(x[0],POLICYNO):
             pol = x[1]
         
-
     rating_effective_date = [x for x in RATINGLIST if ("/" in x)][0]
     risk_name =  " ".join(RISKLIST)
     state_code = " ".join(STATEL)
+
     if risk_name == "":
         print("Risk Name Not Found")
     if risk_id == "":
@@ -190,10 +192,9 @@ def extractsec1(LIST):
         print("Exp Date Not Found")
     if pol == "":
         print("Policy Number Not Found")
-    
-
+        
     temp = {
-                            "risk_name": risk_name,
+                            "risk_name": cleant(risk_name),
                             "risk_id": risk_id,
                             "rating_effective_date": rating_effective_date,
                             "production_date": production_date,
@@ -279,22 +280,30 @@ def extractsec3(x,data):
         
     return exsec2
 
-def same(P):
+def same(P,a,b):
     p = P.copy()
     r , c ,_= p.shape
-    a = cv2.blur(p , (50,1))
-    a = np.where(a > 50 , 255,0)
+    rm = 50
+    wid = 10
+    if c > 2500:
+        rm = 100
+    p = np.where(p < 170 , 0,255)
+    a = cv2.blur(p , (a,1))
+    a = np.where(a > rm , 255,0)
+    
     a = cv2.line(np.float32(a), (0,0), (c, 0), (0, 0, 0), thickness=20)
     hlist = [BreakPoints(a,0,x) for x in range(0,c,10)]
     h = sorted(hlist, key = lambda x: len(x), reverse = True)[0]
     h.append(r)
-    a = cv2.blur(p , (1,30))
-    a = np.where(a > 50 , 255,0)
-    
+    h = hcheck(h)
+    a = cv2.blur(p , (1,b))
+    a = np.where(a > rm , 255,0)
     line_thickness = 2
     for x in h:
         a = cv2.line(np.float32(a), (0, x), (c, x), (0, 0, 0), thickness=line_thickness)
-    a = cv2.line(a, (0, 0), (0, r), (0, 0, 0), thickness=10)
+    a = cv2.line(a, (0, 0), (0, r), (0, 0, 0), thickness=10)    
+    a = cv2.line(a, (c,0), (c, r), (0, 0, 0), thickness=10)
+    
     yy = []
     cords = []
     y = 0
@@ -304,12 +313,12 @@ def same(P):
         temp_yy = []
         mid = int((h[ind] + h[ind-1])/2)
         for x in range(c):
-            if a[mid,x].sum() == 0 and ignore_first and abs(y-x) > 10 and abs(h[ind] - h[ind-1]) > 20:
+            if a[mid,x].sum() == 0 and ignore_first and abs(y-x) > wid and abs(h[ind] - h[ind-1]) > 20:
                 if x < y:
                     y = x
                     continue
                 temp_cords.append([(y,h[ind-1]),(x,h[ind])])
-                name = np.uint8(p[h[ind-1]:h[ind],y:x,:])
+                name = np.uint8(P[h[ind-1]:h[ind],y:x,:])
                 temp_yy.append(name)
                 y = x
             elif a[mid,x].sum() == 0:
@@ -411,6 +420,21 @@ def extract4(LIST,data,r,b):
     temp["statecode"] = state_code
     return temp
 
+def check1(text_detections_row):
+    for x in text_detections_row:
+        if "total" in x.lower().strip():
+            return True
+    return False
+
+def hcheck(l):
+    newl = [0]
+    prev = newl[0]
+    for x in range(1,len(l)):
+        if abs(prev - l[x]) > 35:
+            newl.append(l[x])
+            prev = l[x]
+    return newl
+        
 
 path = sys.argv[-2]
 json = {
@@ -428,21 +452,28 @@ json = {
 }
 im = convert_from_path(path)
 json["page_count"] = str(len(im))
-json
-
 
 temp_list = []
 for page in range(1,int(json["page_count"])):
     bound = boundary(im[page])
-    det = detect(bound,"page"+str(page))
-    secs,breakpoints = segmentation(bound)
+    bound = cv2.cvtColor(bound, cv2.COLOR_RGB2GRAY)
+    bound = cv2.cvtColor(bound, cv2.COLOR_GRAY2RGB)
 
-    t = extractsec1(det)
+    r,c,_ = bound.shape
+    if c > 2500:
+        bound = cv2.resize(bound, (1300,1670), interpolation = cv2.INTER_AREA)
+    det = detect(bound,"page"+str(page))
+    r,c,_ = bound.shape
+    secs,breakpoints = segmentation(bound,int(r*0.03588516746))
+    
+    t = extractsec1(det,c,breakpoints[1])
+
     print(len(secs),"secs in page",page)
+
 
     for sec_n in range(1,len(secs)):
         sec = secs[sec_n].copy()
-        small_block,cords,hlen = same(sec)
+        small_block,cords,hlen = same(sec,int(c*0.03846153846),int(c*0.02307692307))
         print("Sec",sec_n,"of page",page,"has",hlen-1,"rows")
         text_detections_in_order = []
         for indr,row in enumerate(cords):
@@ -452,10 +483,12 @@ for page in range(1,int(json["page_count"])):
                 for ind_d, (block_detection,text) in enumerate(det):
                     if blockIsIn(block_detection,((tlr,tlc+breakpoints[sec_n]),(brr,brc+breakpoints[sec_n]))):
                         text_detections_col.append(text)
-
                 
                 to_add = clean(" ".join(text_detections_col))
                 text_detections_row.append(to_add)
+            if check1(text_detections_row):
+                text_detections_in_order.append(text_detections_row)
+                break            
             text_detections_in_order.append(text_detections_row)
         temp = extract3(text_detections_in_order[-1],t)
         for x in range(1,len(text_detections_in_order)-1):
@@ -471,10 +504,11 @@ for page in range(1,int(json["page_count"])):
             t = extract4( det,t,sec.shape[0],breakpoints[sec_n]).copy()
         except:
             pass
-                
+
 print( "Total Records Found:", len(temp_list))
 json["merged_amit_data_edit"] = temp_list
 json_base = []
 json_base.append(json)
+
 with open(sys.argv[-1]+"/"+path.split("/")[-1].split(".")[0]+'.json', 'w') as fp:
-        j.dump(json_base, fp,indent = 4)
+    j.dump(json_base, fp,indent = 4)
